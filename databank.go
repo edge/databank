@@ -1,172 +1,233 @@
 package databank
 
-import "time"
+import (
+	"fmt"
+)
 
-// Databank is a standard databank frontend containing metadata handling, allowing a backend driver to simply focus on reading/writing to its storage.
-type Databank struct {
-	l Lifetime
-	d Driver
-}
-
-// Driver describes a backend that can be used by the Databank frontend.
-type Driver interface {
-	Delete(k string) bool
-	Exists(k string) bool
-	Expire(k string) bool
+// Databank is a standard cache frontend for any backend Driver.
+type Databank interface {
+	// Cleanup all expired entries.
+	Cleanup() (uint, bool)
+	// Delete an entry.
+	Delete(id string) bool
+	// Expire an entry.
+	Expire(id string) bool
+	// Flush all entries.
 	Flush() bool
-	FilterKeys(f Filter) []string
-	Read(k string) (Entry, bool)
-	Write(k string, e Entry) bool
+	// Has an ID, i.e. entry exists in storage?
+	// Note that an expired entry still 'exists' until it is deleted or flushed out.
+	Has(id string) bool
+	// NewEntry creates a preconfigured, empty Entry.
+	NewEntry(key string) *Entry
+	// Read an entry from storage.
+	Read(id string) (*Entry, bool)
+	// Restore entries from storage.
+	Restore() bool
+	// Review entries, automatically expiring them as necessary.
+	Review() (uint, bool)
+	// Scan for IDs.
+	Scan() ([]string, bool)
+	// Search entries.
+	Search(q *Query) (map[string]*Entry, bool)
+	// Write an entry to storage.
+	Write(e *Entry) bool
+
+	// Driver provides direct access to the backend storage API.
+	Driver() Driver
+
+	// ReadInt16 from storage.
+	ReadInt16(id string) (int16, bool)
+	// ReadInt32 from storage.
+	ReadInt32(id string) (int32, bool)
+	// ReadInt64 from storage.
+	ReadInt64(id string) (int64, bool)
+	// ReadString from storage.
+	ReadString(id string) (string, bool)
+	// ReadUint16 from storage.
+	ReadUint16(id string) (uint16, bool)
+	// ReadUint32 from storage.
+	ReadUint32(id string) (uint32, bool)
+	// ReadUint64 from storage.
+	ReadUint64(id string) (uint64, bool)
+	// WriteInt16 to storage.
+	WriteInt16(id string, val int16) (*Entry, bool)
+	// WriteInt32 to storage.
+	WriteInt32(id string, val int32) (*Entry, bool)
+	// WriteInt64 to storage.
+	WriteInt64(id string, val int64) (*Entry, bool)
+	// WriteString to storage.
+	WriteString(id, val string) (*Entry, bool)
+	// WriteUint16 to storage.
+	WriteUint16(id string, val uint16) (*Entry, bool)
+	// WriteUint32 to storage.
+	WriteUint32(id string, val uint32) (*Entry, bool)
+	// WriteUint64 to storage.
+	WriteUint64(id string, val uint64) (*Entry, bool)
 }
 
-// Entry represents a single data entry and its metadata.
-type Entry struct {
-	Created time.Time
-	Expired bool
-	Value   interface{}
-}
-
-// Filter represents parameters for internal filtering of data entries. This is used by the Driver implementation.
-type Filter struct {
-	UseBefore bool
-	Before    time.Time
-
-	IncludeExpired bool
-	IncludeLive    bool
-}
-
-// Lifetime represents a lifetime configuration that applies to all entries in the same databank.
-type Lifetime struct {
-	Expiry   time.Duration
-	Infinite bool
-}
-
-// New databank with given driver and lifetime configuration.
-func New(d Driver, l Lifetime) *Databank {
-	return &Databank{l, d}
-}
-
-// Delete a data entry by key.
-func (c *Databank) Delete(k string) bool {
-	return c.d.Delete(k)
-}
-
-// DeleteAllExpired data entries.
-func (c *Databank) DeleteAllExpired() bool {
-	for _, k := range c.FilterExpiredKeys() {
-		c.Delete(k)
-	}
-	return true
-}
-
-// Exists - checks whether a data entry exists for a key.
+// Driver describes the storage API required by databank.
 //
-// Note that an expired data entry still 'exists' - it just isn't readable.
-func (c *Databank) Exists(k string) bool {
-	return c.d.Exists(k)
+// Errors returned from a Driver implementation reflect critical operational problems, while Booleans indicate a normal state response.
+// For example, Read() returns the Entry, a boolean confirming the entry was read successfully, and an error if there was an unexpected reason the Entry was not found e.g. connection failure.
+// It is possible for Read() to return false and no error, indicating that the read failed but not unexpectedly.
+type Driver interface {
+	// Cleanup all expired entries.
+	Cleanup() (uint, bool, []error)
+	// Delete an entry.
+	Delete(id string) (bool, error)
+	// Expire an entry.
+	Expire(id string) (bool, error)
+	// Flush all entries.
+	Flush() (bool, []error)
+	// Has an ID, i.e. entry exists in storage?
+	// Note that an expired entry still 'exists' until it is deleted or flushed out.
+	Has(id string) (bool, error)
+	// Read an entry from storage.
+	Read(id string) (*Entry, bool, error)
+	// Restore entries from storage.
+	Restore() (bool, error)
+	// Review entries, automatically expiring them as necessary.
+	Review() (uint, bool, []error)
+	// Scan for IDs.
+	Scan() ([]string, bool, error)
+	// Search entries.
+	Search(q *Query) (map[string]*Entry, bool, error)
+	// Write an entry to storage.
+	Write(e *Entry) (bool, error)
 }
 
-// Expire a data entry by key.
-func (c *Databank) Expire(k string) bool {
-	return c.d.Expire(k)
+// Query TODO
+type Query struct{}
+
+// databank is the internal implementation of Databank.
+type databank struct {
+	config *Config
+	driver Driver
 }
 
-// ExpireAllExpiring data entries (that are due to expire but have not yet).
-func (c *Databank) ExpireAllExpiring() bool {
-	for _, k := range c.FilterExpiringKeys() {
-		c.Expire(k)
+// New Databank.
+func New(d Driver, c *Config) Databank {
+	var config *Config
+	if c != nil {
+		config = c
+	} else {
+		config = NewConfig()
 	}
-	return true
-}
-
-// Flush all entries from databank.
-func (c *Databank) Flush() bool {
-	return c.d.Flush()
-}
-
-// FilterExpiredKeys retrieves a filtered subset of keys in storage that have expired.
-func (c *Databank) FilterExpiredKeys() []string {
-	p := Filter{
-		UseBefore:      false,
-		IncludeExpired: true,
-		IncludeLive:    false,
+	return &databank{
+		config: config,
+		driver: d,
 	}
-	return c.FilterKeys(p)
 }
 
-// FilterExpiringKeys retrieves a filtered subset of keys in storage that are due to expire.
-func (c *Databank) FilterExpiringKeys() []string {
-	if c.l.Infinite {
-		return []string{}
-	}
-	p := Filter{
-		UseBefore:      true,
-		Before:         c.getCurrentExpiryTime(),
-		IncludeExpired: false,
-		IncludeLive:    true,
-	}
-	return c.FilterKeys(p)
-}
-
-// FilterKeys retrieves a filtered subset of keys in storage.
-func (c *Databank) FilterKeys(f Filter) []string {
-	return c.d.FilterKeys(f)
-}
-
-// Read a data entry by its key.
-func (c *Databank) Read(k string) (Entry, bool) {
-	if e, ok := c.d.Read(k); ok {
-		if !c.maybeExpire(k, e) {
-			return e, true
+func (d *databank) Cleanup() (uint, bool) {
+	n, ok, errs := d.driver.Cleanup()
+	for _, err := range errs {
+		if err != nil {
+			d.report(err)
 		}
 	}
-	return Entry{}, false
+	return n, ok
 }
 
-// ReadValue reads a data entry's value by key. This convenience function elides Entry metadata.
-func (c *Databank) ReadValue(k string) (interface{}, bool) {
-	if e, ok := c.Read(k); ok {
-		return e.Value, ok
+func (d *databank) Delete(id string) bool {
+	ok, err := d.driver.Delete(id)
+	if err != nil {
+		d.report(err)
 	}
-	return nil, false
+	return ok
 }
 
-// Write a data entry with a key.
-//
-// If the key is already in use, the existing data entry will be overwritten.
-func (c *Databank) Write(k string, e Entry) bool {
-	return c.d.Write(k, e)
+func (d *databank) Driver() Driver {
+	return d.driver
 }
 
-// WriteValue writes a data entry's value by key. This convenience function constructs an Entry with a current timestamp.
-//
-// If the key is already in use, the existing data entry will be overwritten.
-func (c *Databank) WriteValue(k string, v interface{}) bool {
-	return c.Write(k, Entry{
-		Created: time.Now(),
-		Expired: false,
-		Value:   v,
-	})
+func (d *databank) Expire(id string) bool {
+	ok, err := d.driver.Expire(id)
+	if err != nil {
+		d.report(err)
+	}
+	return ok
 }
 
-// getCurrentExpiryTime gets the current time before which entries are considered to be expired.
-func (c *Databank) getCurrentExpiryTime() time.Time {
-	if c.l.Infinite {
-		return time.Time{}
+func (d *databank) Flush() bool {
+	ok, errs := d.driver.Flush()
+	for _, err := range errs {
+		if err != nil {
+			d.report(err)
+		}
 	}
-	return time.Now().Add(-c.l.Expiry)
+	return ok
 }
 
-// maybeExpire expires an entry automatically if it is older than the lifetime allows.
-func (c *Databank) maybeExpire(k string, e Entry) bool {
-	if e.Expired {
-		return true
+func (d *databank) Has(id string) bool {
+	ok, err := d.driver.Has(id)
+	if err != nil {
+		d.report(err)
 	}
-	if c.l.Infinite {
-		return false
+	return ok
+}
+
+func (d *databank) NewEntry(key string) *Entry {
+	return NewEntry(key, d.config.Lifetime)
+}
+
+func (d *databank) Read(id string) (*Entry, bool) {
+	e, ok, err := d.driver.Read(id)
+	if err != nil {
+		d.report(err)
 	}
-	if e.Created.Before(c.getCurrentExpiryTime()) {
-		return c.Expire(k)
+	if ok && !d.config.Hot {
+		if e.MaybeExpire() {
+			d.Write(e)
+			return nil, false
+		}
 	}
-	return false
+	return e, ok
+}
+
+func (d *databank) Restore() bool {
+	ok, err := d.driver.Restore()
+	if err != nil {
+		d.report(err)
+	}
+	return ok
+}
+
+func (d *databank) Review() (uint, bool) {
+	n, ok, errs := d.driver.Review()
+	for _, err := range errs {
+		if err != nil {
+			d.report(err)
+		}
+	}
+	return n, ok
+}
+
+func (d *databank) Scan() ([]string, bool) {
+	ids, ok, err := d.driver.Scan()
+	if err != nil {
+		d.report(err)
+	}
+	return ids, ok
+}
+
+func (d *databank) Search(q *Query) (map[string]*Entry, bool) {
+	results, ok, err := d.driver.Search(q)
+	if err != nil {
+		d.report(err)
+	}
+	return results, ok
+}
+
+func (d *databank) Write(e *Entry) bool {
+	ok, err := d.driver.Write(e)
+	if err != nil {
+		d.report(err)
+	}
+	return ok
+}
+
+// TODO improve
+func (d *databank) report(err error) {
+	fmt.Println(err)
 }
