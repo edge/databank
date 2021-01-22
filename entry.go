@@ -46,32 +46,6 @@ func NewEntry(key string, ttl time.Duration) *Entry {
 	}
 }
 
-// EntryID calculates an entry's ID.
-//
-// When tags are set in an entry, they are hashed into the entry's ID.
-// If tags are not set, the entry's key is used as-is.
-//
-// This means that if your entry is not tagged, your calling code does not need to calculate anything i.e.
-//
-//   // Given var d databank.Databank
-//   val, ok := d.ReadString("mykey")
-//
-// However, if you use any tags or just for safety, you can use EntryID to simplify things:
-//
-//   val, ok := d.ReadString(databank.EntryID("mykey", map[string]string{"abc": "def"}))
-//
-// If you have an Entry already, its ID() function produces the same result.
-func EntryID(key string, tags map[string]string) string {
-	if len(tags) > 0 {
-		id := fmt.Sprintf("%s?", key)
-		for k, v := range tags {
-			id = fmt.Sprintf("%s&%s=%s", id, k, v)
-		}
-		return hash(id)
-	}
-	return key
-}
-
 // Expire marks the entry expired.
 func (e *Entry) Expire() {
 	e.Meta.Expired = true
@@ -113,4 +87,30 @@ func (e *Entry) Touch() {
 func hash(id string) string {
 	sum := sha1.Sum([]byte(id))
 	return string(sum[0:20])
+}
+
+// EntryID calculates an entry's ID.
+//
+// When tags are set in an entry, they are hashed into the entry's ID.
+// If tags are not set, the entry's key is used as-is.
+//
+// This means that if your entry is not tagged, your calling code does not need to calculate anything i.e.
+//
+//   // Given var d databank.Databank
+//   val, ok := d.ReadString("mykey")
+//
+// However, if you use any tags or just for safety, you can use EntryID to simplify things:
+//
+//   val, ok := d.ReadString(databank.EntryID("mykey", map[string]string{"abc": "def"}))
+//
+// If you have an Entry already, its ID() function produces the same result.
+func EntryID(key string, tags map[string]string) string {
+	if len(tags) > 0 {
+		id := fmt.Sprintf("%s?", key)
+		for k, v := range tags {
+			id = fmt.Sprintf("%s&%s=%s", id, k, v)
+		}
+		return hash(id)
+	}
+	return key
 }
