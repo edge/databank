@@ -220,6 +220,7 @@ func (d *databank) Search(q *Query) (map[string]*Entry, bool) {
 }
 
 func (d *databank) Write(e *Entry) bool {
+	e.CalculateSize()
 	ok, err := d.driver.Write(e)
 	if err != nil {
 		d.report(err)

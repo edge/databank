@@ -10,7 +10,7 @@ import (
 type Entry struct {
 	Content []byte            `json:"content"`
 	Key     string            `json:"key"`
-	Size    uint64            `json:"size"`
+	Size    int               `json:"size"`
 	Tags    map[string]string `json:"tags"`
 
 	Meta *EntryMetadata `json:"meta"`
@@ -44,6 +44,11 @@ func NewEntry(key string, ttl time.Duration) *Entry {
 
 		Meta: meta,
 	}
+}
+
+// CalculateSize of content.
+func (e *Entry) CalculateSize() {
+	e.Size = len(e.Content)
 }
 
 // Expire marks the entry expired.
