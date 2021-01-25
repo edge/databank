@@ -74,8 +74,12 @@ type Driver interface {
 	// Cleanup all expired entries.
 	Cleanup() (uint, bool, []error)
 	// Delete an entry.
+	// The bool return reflects the entry's nonexistence in storage when this function returns.
+	// Ergo, if the ID is not found, this function still returns true.
 	Delete(id string) (bool, error)
 	// Expire an entry.
+	// The bool return reflects whether the entry is in an expired or otherwise unreachable state when this function returns.
+	// Ergo, if the ID is not found, this function still returns true.
 	Expire(id string) (bool, error)
 	// Flush all entries.
 	Flush() (bool, []error)

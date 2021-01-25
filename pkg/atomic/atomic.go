@@ -26,10 +26,10 @@ func NewDriver() databank.Driver {
 func (d *driver) Cleanup() (uint, bool, []error) {
 	var deleted uint
 	errs := []error{}
-	d.store.Range(func(key, value interface{}) bool {
+	d.store.Range(func(id, value interface{}) bool {
 		e := value.(databank.Entry)
 		if e.Meta.Expired {
-			ok, err := d.Delete(key.(string))
+			ok, err := d.Delete(id.(string))
 			if err != nil {
 				errs = append(errs, err)
 			}
