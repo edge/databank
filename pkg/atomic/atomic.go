@@ -5,8 +5,8 @@ import (
 	"github.com/edge/databank"
 )
 
-// driver is the atomic implementation of databank.Driver.
-type driver struct {
+// Driver is the atomic implementation of databank.Driver.
+type Driver struct {
 	store *atomicstore.Store
 }
 
@@ -16,14 +16,14 @@ func New(c *databank.Config) databank.Databank {
 }
 
 // NewDriver creates an atomic Driver.
-func NewDriver() databank.Driver {
-	return &driver{
+func NewDriver() *Driver {
+	return &Driver{
 		store: atomicstore.New(true),
 	}
 }
 
 // Cleanup all expired entries.
-func (d *driver) Cleanup() (uint, bool, []error) {
+func (d *Driver) Cleanup() (uint, bool, []error) {
 	var deleted uint
 	errs := []error{}
 	d.store.Range(func(id, value interface{}) bool {
@@ -43,14 +43,18 @@ func (d *driver) Cleanup() (uint, bool, []error) {
 	return deleted, true, errs
 }
 
-// Delete a data entry by key.
-func (d *driver) Delete(id string) (bool, error) {
+// Delete an entry.
+// The bool return reflects the entry's nonexistence in storage when this function returns.
+// Ergo, if the ID is not found, this function still returns true.
+func (d *Driver) Delete(id string) (bool, error) {
 	d.store.Delete(id)
 	return true, nil
 }
 
-// Expire a data entry by key.
-func (d *driver) Expire(id string) (bool, error) {
+// Expire an entry.
+// The bool return reflects whether the entry is in an expired or otherwise unreachable state when this function returns.
+// Ergo, if the ID is not found, this function still returns true.
+func (d *Driver) Expire(id string) (bool, error) {
 	e, ok, err := d.Read(id)
 	if err != nil {
 		return false, err
@@ -63,14 +67,14 @@ func (d *driver) Expire(id string) (bool, error) {
 }
 
 // Flush all entries.
-func (d *driver) Flush() (bool, []error) {
+func (d *Driver) Flush() (bool, []error) {
 	d.store.Flush()
 	return true, []error{}
 }
 
 // Has an ID, i.e. entry exists in storage?
 // Note that an expired entry still 'exists' until it is deleted or flushed out.
-func (d *driver) Has(id string) (bool, error) {
+func (d *Driver) Has(id string) (bool, error) {
 	for storedID := range d.store.GetKeyMap() {
 		if storedID == id {
 			return true, nil
@@ -79,20 +83,16 @@ func (d *driver) Has(id string) (bool, error) {
 	return false, nil
 }
 
-// Read a data entry by its key.
-func (d *driver) Read(id string) (*databank.Entry, bool, error) {
+// Read an entry from storage.
+func (d *Driver) Read(id string) (*databank.Entry, bool, error) {
 	if e, ok := d.store.Get(id); ok {
 		return e.(*databank.Entry), ok, nil
 	}
 	return nil, false, nil
 }
 
-func (d *driver) Restore() (bool, error) {
-	return true, nil
-}
-
 // Review entries, automatically expiring them as necessary.
-func (d *driver) Review() (uint, bool, []error) {
+func (d *Driver) Review() (uint, bool, []error) {
 	var expired uint
 	d.store.Range(func(_, value interface{}) bool {
 		e := value.(*databank.Entry)
@@ -109,7 +109,8 @@ func (d *driver) Review() (uint, bool, []error) {
 	return expired, true, []error{}
 }
 
-func (d *driver) Scan() ([]string, bool, error) {
+// Scan for IDs.
+func (d *Driver) Scan() ([]string, bool, error) {
 	keys := []string{}
 	for key := range d.store.GetKeyMap() {
 		keys = append(keys, key)
@@ -120,12 +121,12 @@ func (d *driver) Scan() ([]string, bool, error) {
 // Search entries.
 //
 // TODO
-func (d *driver) Search(q *databank.Query) (map[string]*databank.Entry, bool, error) {
+func (d *Driver) Search(q *databank.Query) (map[string]*databank.Entry, bool, error) {
 	return map[string]*databank.Entry{}, false, nil
 }
 
-// Write a data entry with a key.
-func (d *driver) Write(e *databank.Entry) (bool, error) {
+// Write an entry to storage.
+func (d *Driver) Write(e *databank.Entry) (bool, error) {
 	d.store.Insert(e.ID(), e)
 	return true, nil
 }

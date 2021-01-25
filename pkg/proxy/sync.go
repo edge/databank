@@ -7,26 +7,34 @@ import (
 // SyncDriver is a synchronous proxying implementation of databank.Driver.
 // It takes any number of other drivers, and mirrors read/write operations sequentially across them.
 //
-// The order of drivers is important: they are always accessed from first to last when reading.
-// Therefore, you should generally sort the 'more local' drivers first, e.g. memory then disk, rather than the reverse.
-// This improves the redundancy and performance of read operations.
+// The order of drivers is important. You should generally sort drivers from least to most authoritative, and we call the last driver the 'authority driver'.
+// For example, the first driver might be an in-memory driver, and the second a disk driver.
+// This would mean that read operations hit the in-memory driver first, whereas a delete operation works backward from the disk driver.
+// This combines the performance benefit of a fast memory storage with the persistence of a disk store.
+//
+// Principally, SyncDriver 'writes forward' and 'reads backward'.
+// Read the documentation for each function for more detail on internal behaviours.
 type SyncDriver struct {
 	drivers []databank.Driver
 }
 
-// NewSyncDriver creates an atomic Driver.
+// NewSync creates a databank with a SyncDriver backend.
+func NewSync(c *databank.Config, drivers ...databank.Driver) databank.Databank {
+	d := NewSyncDriver(drivers...)
+	return databank.New(d, c)
+}
+
+// NewSyncDriver creates a SyncDriver.
 func NewSyncDriver(drivers ...databank.Driver) *SyncDriver {
 	return &SyncDriver{drivers}
 }
 
 // Cleanup all expired entries.
 //
-// SyncDriver iterates through all drivers in reverse sequence from back to front.
-// This ensures that fast front drivers cannot recover values from slower back drivers mid-delete.
-//
+// SyncDriver works backwards from the authority driver to ensure that front drivers cannot recover data mid-cleanup.
 // Errors encountered are aggregated, but do not stop the iterator.
 //
-// Note that due to implementation requirements, SyncDriver implements this function internally and does not use the Cleanup function of its configured drivers.
+// Note that SyncDriver implements this function internally and does not use the Cleanup function of its configured drivers.
 //
 // TODO This is not performant as driver search [for expired entries] does not work yet.
 // This should be improved by substituting Search() for Scan() ASAP.
@@ -79,10 +87,8 @@ func (d *SyncDriver) Cleanup() (uint, bool, []error) {
 
 // Delete an entry.
 //
-// SyncDriver iterates through all drivers in reverse sequence from back to front.
-// This ensures that fast front drivers cannot recover values from slower back drivers mid-delete.
-//
-// Errors encountered by any driver do not stop the iterator, but due to type constraints are not aggregated; only the last error will be returned.
+// SyncDriver works backwards from the authority driver to ensure that front drivers cannot recover data mid-delete.
+// Errors encountered by any driver do not stop the iterator, but are not aggregated; only the last error will be returned.
 func (d *SyncDriver) Delete(id string) (bool, error) {
 	var errResult error
 	okResult := true
@@ -91,7 +97,6 @@ func (d *SyncDriver) Delete(id string) (bool, error) {
 		ok, err := driver.Delete(id)
 		if err != nil {
 			errResult = err
-			okResult = false
 		}
 		if !ok {
 			okResult = false
@@ -106,7 +111,7 @@ func (d *SyncDriver) Delete(id string) (bool, error) {
 // Its bool return reflects whether ALL drivers expired their entry successfully.
 // If any driver fails to expire their data, this will be false, even if no error was raised.
 //
-// Note that due to implementation requirements, SyncDriver implements this function internally and does not use the Expire function of its configured drivers.
+// Note that SyncDriver implements this function internally and does not use the Expire function of its configured drivers.
 func (d *SyncDriver) Expire(id string) (bool, error) {
 	e, ok, err := d.Read(id)
 	if err != nil {
@@ -121,8 +126,7 @@ func (d *SyncDriver) Expire(id string) (bool, error) {
 
 // Flush all entries.
 //
-// SyncDriver flushes all drivers in reverse sequence from back to front.
-// This ensures that fast front drivers cannot recover values from slower back drivers mid-flush.
+// SyncDriver works backwards from the authority driver to ensure that front drivers cannot recover data mid-flush.
 // Errors encountered are aggregated, but do not stop the iterator.
 func (d *SyncDriver) Flush() (bool, []error) {
 	errors := []error{}
@@ -147,7 +151,7 @@ func (d *SyncDriver) Flush() (bool, []error) {
 // Has an ID, i.e. entry exists in storage?
 // Note that an expired entry still 'exists' until it is deleted or flushed out.
 //
-// SyncDriver is naïve and takes the first positive response, assuming that subsequent drivers should hold the same ID.
+// SyncDriver is naïve and takes the first positive response, assuming that drivers further back should hold the same ID.
 // If it encounters any error, the iterator stops and that error is returned.
 func (d *SyncDriver) Has(id string) (bool, error) {
 	for _, driver := range d.drivers {
@@ -162,31 +166,26 @@ func (d *SyncDriver) Has(id string) (bool, error) {
 	return false, nil
 }
 
-// Read a data entry by its key.
+// Read an entry from storage.
 //
 // SyncDriver tries to read from each driver in sequence until it finds a hit.
 // If a hit is found after consulting multiple drivers, the value is silently written back into each driver that failed to read.
-// Errors are encountered during writeback are ignored - SyncDriver is naïve and trusts that the prior drivers will work.
-//
 // If an error is returned by any driver, the iterator stops and that error is returned.
+//
+// Errors encountered during writeback are ignored - SyncDriver is naïve and trusts that the prior drivers work, since they didn't return errors the first time.
 func (d *SyncDriver) Read(id string) (*databank.Entry, bool, error) {
 	failed := []*databank.Driver{}
 	var result *databank.Entry
-	var errResult error
 	for _, driver := range d.drivers {
 		e, ok, err := driver.Read(id)
 		if err != nil {
-			errResult = err
-			break
+			return nil, false, err
 		}
 		if ok {
 			result = e
 			break
 		}
 		failed = append(failed, &driver)
-	}
-	if errResult != nil {
-		return nil, false, errResult
 	}
 	if result == nil {
 		return nil, false, nil
@@ -203,19 +202,54 @@ func (d *SyncDriver) Read(id string) (*databank.Entry, bool, error) {
 
 // Restore entries from storage.
 //
-// TODO
-func (d *SyncDriver) Restore() (bool, error) {
-	return false, nil
+// SyncDriver loads all data from the authoritative driver and copies it backward.
+// Its bool return reflects whether ALL entries were successfully retrieved and copied.
+// Errors encountered are aggregated, but do not stop the iterator.
+//
+// Usage of this function may not be advisable depending on the size of your data source.
+func (d *SyncDriver) Restore() (bool, []error) {
+	ids, ok, err := d.Scan()
+	if err != nil {
+		return false, []error{err}
+	}
+	if !ok {
+		return false, []error{}
+	}
+	errors := []error{}
+	okResult := true
+	for _, id := range ids {
+		e, ok, err := d.authority().Read(id)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+		if !ok {
+			okResult = false
+			continue
+		}
+		for i := range d.drivers {
+			if i == 0 {
+				continue
+			}
+			driver := d.drivers[len(d.drivers)-(i+1)]
+			ok, err := driver.Write(e)
+			if err != nil {
+				errors = append(errors, err)
+			}
+			if !ok {
+				okResult = false
+			}
+		}
+	}
+	return okResult, errors
 }
 
 // Review entries, automatically expiring them as necessary.
 //
-// SyncDriver iterates through all drivers in reverse sequence from back to front.
-// This ensures that fast front drivers cannot recover values from slower back drivers mid-review.
-//
+// SyncDriver works backwards from the authority driver to ensure that front drivers cannot recover data mid-review.
 // Errors encountered are aggregated, but do not stop the iterator.
 //
-// Note that due to implementation requirements, SyncDriver implements this function internally and does not use the Review function of its configured drivers.
+// Note that SyncDriver implements this function internally and does not use the Review function of its configured drivers.
 //
 // TODO This is not performant as driver search [for living entries] does not work yet.
 // This should be improved by substituting Search() for Scan() ASAP.
@@ -267,13 +301,10 @@ func (d *SyncDriver) Review() (uint, bool, []error) {
 
 // Scan for IDs.
 //
-// SyncDriver goes straight to the back of the queue when scanning for IDs.
-// The last driver configured is considered to be authoritative, as it is where data is ultimately recovered from if all prior drivers fail.
-// For example, a cold cache might be restored from a disk driver configured as backend.
-// All other drivers in between the caller and the last cache are by definition not authoritative, and so are ignored by this implementation.
+// SyncDriver goes straight to the authority driver when scanning for IDs.
+// All other drivers are by definition not authoritative, and are ignored by this implementation.
 func (d *SyncDriver) Scan() ([]string, bool, error) {
-	last := d.drivers[len(d.drivers)-1]
-	return last.Scan()
+	return d.authority().Scan()
 }
 
 // Search entries.
@@ -283,14 +314,14 @@ func (d *SyncDriver) Search(q *databank.Query) (map[string]*databank.Entry, bool
 	return map[string]*databank.Entry{}, false, nil
 }
 
-// Write a data entry with a key.
+// Write an entry to storage.
 //
 // SyncDriver writes to each driver sequentially.
 // Its bool return reflects whether ALL drivers wrote successfully.
 // If any driver fails to write, this will be false, even if no error was raised.
 //
 // If a write error is encountered in any driver, the iterator stops, prior writes are silently rolled back, and that error is returned.
-// Errors are encountered during rollback are ignored - SyncDriver is naïve and trusts that the prior drivers will work.
+// Errors encountered during rollback are ignored - SyncDriver is naïve and trusts that the prior drivers will work.
 func (d *SyncDriver) Write(e *databank.Entry) (bool, error) {
 	id := e.ID()
 	origE, _, err := d.Read(id)
@@ -308,11 +339,11 @@ func (d *SyncDriver) Write(e *databank.Entry) (bool, error) {
 			okResult = false
 			break
 		}
-		if ok {
-			written = append(written, &driver)
-		} else {
+		if !ok {
 			okResult = false
+			continue
 		}
+		written = append(written, &driver)
 	}
 	if errResult != nil {
 		w := len(written)
@@ -326,4 +357,9 @@ func (d *SyncDriver) Write(e *databank.Entry) (bool, error) {
 		}
 	}
 	return okResult, errResult
+}
+
+// authority driver shorthand.
+func (d *SyncDriver) authority() databank.Driver {
+	return d.drivers[len(d.drivers)-1]
 }

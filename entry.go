@@ -111,11 +111,11 @@ func hash(id string) string {
 // If you have an Entry already, its ID() function produces the same result.
 func EntryID(key string, tags map[string]string) string {
 	if len(tags) > 0 {
-		id := fmt.Sprintf("%s?", key)
+		id := ""
 		for k, v := range tags {
 			id = fmt.Sprintf("%s&%s=%s", id, k, v)
 		}
-		return hash(id)
+		return fmt.Sprintf("%s%s", key, hash(id))
 	}
 	return key
 }

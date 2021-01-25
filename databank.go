@@ -21,8 +21,6 @@ type Databank interface {
 	NewEntry(key string) *Entry
 	// Read an entry from storage.
 	Read(id string) (*Entry, bool)
-	// Restore entries from storage.
-	Restore() bool
 	// Review entries, automatically expiring them as necessary.
 	Review() (uint, bool)
 	// Scan for IDs.
@@ -88,8 +86,6 @@ type Driver interface {
 	Has(id string) (bool, error)
 	// Read an entry from storage.
 	Read(id string) (*Entry, bool, error)
-	// Restore entries from storage.
-	Restore() (bool, error)
 	// Review entries, automatically expiring them as necessary.
 	Review() (uint, bool, []error)
 	// Scan for IDs.
@@ -187,14 +183,6 @@ func (d *databank) Read(id string) (*Entry, bool) {
 		}
 	}
 	return e, ok
-}
-
-func (d *databank) Restore() bool {
-	ok, err := d.driver.Restore()
-	if err != nil {
-		d.report(err)
-	}
-	return ok
 }
 
 func (d *databank) Review() (uint, bool) {

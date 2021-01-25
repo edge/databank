@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/edge/databank"
@@ -18,10 +19,12 @@ type Config struct {
 	Path    string
 }
 
-// driver is the disk implementation of databank.Driver.
-type driver struct {
+// Driver is the disk implementation of databank.Driver.
+type Driver struct {
 	config *Config
 }
+
+var filesafeRegexp, _ = regexp.Compile("[^A-z0-9\\-\\_\\.]+")
 
 // New databank with a disk Driver backend.
 func New(c *databank.Config, dc *Config) databank.Databank {
@@ -37,8 +40,8 @@ func NewConfig(path string) *Config {
 }
 
 // NewDriver creates a disk Driver.
-func NewDriver(c *Config) databank.Driver {
-	return &driver{
+func NewDriver(c *Config) *Driver {
+	return &Driver{
 		config: c,
 	}
 }
@@ -46,7 +49,7 @@ func NewDriver(c *Config) databank.Driver {
 // Cleanup all expired entries.
 //
 // TODO improve performance
-func (d *driver) Cleanup() (uint, bool, []error) {
+func (d *Driver) Cleanup() (uint, bool, []error) {
 	var deleted uint
 	errs := []error{}
 	ids, ok, err := d.Scan()
@@ -77,8 +80,10 @@ func (d *driver) Cleanup() (uint, bool, []error) {
 	return deleted, ok, errs
 }
 
-// Delete a data entry by key.
-func (d *driver) Delete(id string) (bool, error) {
+// Delete an entry.
+// The bool return reflects the entry's nonexistence in storage when this function returns.
+// Ergo, if the ID is not found, this function still returns true.
+func (d *Driver) Delete(id string) (bool, error) {
 	ok, err := d.Has(id)
 	if err != nil {
 		return false, err
@@ -86,13 +91,15 @@ func (d *driver) Delete(id string) (bool, error) {
 	if !ok {
 		return true, nil
 	}
-	fn := d.idfilepath(id)
+	fn := d.FilepathByID(id)
 	err = os.Remove(fn)
 	return err == nil, err
 }
 
-// // Expire a data entry by key.
-func (d *driver) Expire(id string) (bool, error) {
+// Expire an entry.
+// The bool return reflects whether the entry is in an expired or otherwise unreachable state when this function returns.
+// Ergo, if the ID is not found, this function still returns true.
+func (d *Driver) Expire(id string) (bool, error) {
 	e, ok, err := d.Read(id)
 	if err != nil {
 		return false, err
@@ -104,8 +111,18 @@ func (d *driver) Expire(id string) (bool, error) {
 	return d.Write(e)
 }
 
-// // Flush all entries.
-func (d *driver) Flush() (bool, []error) {
+// Filepath gets the storage path on disk for an Entry.
+func (d *Driver) Filepath(e *databank.Entry) string {
+	return d.FilepathByID(e.ID())
+}
+
+// FilepathByID gets the storage path on disk for an ID.
+func (d *Driver) FilepathByID(id string) string {
+	return path.Join(d.config.Path, filesafe(id))
+}
+
+// Flush all entries.
+func (d *Driver) Flush() (bool, []error) {
 	ids, ok, err := d.Scan()
 	if err != nil {
 		return ok, []error{err}
@@ -121,21 +138,19 @@ func (d *driver) Flush() (bool, []error) {
 	return true, errs
 }
 
-// // Has an ID, i.e. entry exists in storage?
-// // Note that an expired entry still 'exists' until it is deleted or flushed out.
-func (d *driver) Has(id string) (bool, error) {
-	stat, err := os.Stat(d.idfilepath(id))
+// Has an ID, i.e. entry exists in storage?
+// Note that an expired entry still 'exists' until it is deleted or flushed out.
+func (d *Driver) Has(id string) (bool, error) {
+	stat, err := os.Stat(d.FilepathByID(id))
 	return !os.IsNotExist(err) || stat != nil && !stat.IsDir(), err
 }
 
-// Read a data entry by its key.
-//
-// TODO change stuff to use more pointers for Entry storage
-func (d *driver) Read(id string) (*databank.Entry, bool, error) {
+// Read an entry from storage.
+func (d *Driver) Read(id string) (*databank.Entry, bool, error) {
 	if ok, err := d.Has(id); !ok {
 		return nil, ok, err
 	}
-	b, err := ioutil.ReadFile(d.idfilepath(id))
+	b, err := ioutil.ReadFile(d.FilepathByID(id))
 	if err != nil {
 		return nil, false, err
 	}
@@ -146,22 +161,8 @@ func (d *driver) Read(id string) (*databank.Entry, bool, error) {
 	return e, true, err
 }
 
-func (d *driver) Restore() (bool, error) {
-	ids, ok, err := d.Scan()
-	if err != nil {
-		return false, err
-	}
-	if ok {
-		for _, id := range ids {
-			// TODO can improve reporting
-			d.Read(id)
-		}
-	}
-	return ok, nil
-}
-
 // Review entries, automatically expiring them as necessary.
-func (d *driver) Review() (uint, bool, []error) {
+func (d *Driver) Review() (uint, bool, []error) {
 	var expired uint
 	errs := []error{}
 	ids, ok, err := d.Scan()
@@ -194,8 +195,8 @@ func (d *driver) Review() (uint, bool, []error) {
 	return expired, ok, errs
 }
 
-// TODO
-func (d *driver) Scan() ([]string, bool, error) {
+// Scan for IDs.
+func (d *Driver) Scan() ([]string, bool, error) {
 	keys := []string{}
 	err := filepath.Walk(d.config.Path, func(path string, info os.FileInfo, err error) error {
 		keys = append(keys, strings.Replace(path, d.config.Path, "", 1))
@@ -207,12 +208,12 @@ func (d *driver) Scan() ([]string, bool, error) {
 // Search entries.
 //
 // TODO
-func (d *driver) Search(q *databank.Query) (map[string]*databank.Entry, bool, error) {
+func (d *Driver) Search(q *databank.Query) (map[string]*databank.Entry, bool, error) {
 	return map[string]*databank.Entry{}, false, nil
 }
 
-// Write a data entry with a key.
-func (d *driver) Write(e *databank.Entry) (bool, error) {
+// Write an entry to storage.
+func (d *Driver) Write(e *databank.Entry) (bool, error) {
 	file, err := d.open(e)
 	if err != nil {
 		return false, err
@@ -234,17 +235,8 @@ func (d *driver) Write(e *databank.Entry) (bool, error) {
 	return true, nil
 }
 
-// idfilepath gets the storage path on disk for an Entry.
-func (d *driver) filepath(e *databank.Entry) string {
-	return d.idfilepath(e.ID())
-}
-
-// idfilepath gets the storage path on disk for an ID.
-func (d *driver) idfilepath(id string) string {
-	return path.Join(d.config.Path, filesafe(id))
-}
-
-func (d *driver) open(e *databank.Entry) (*os.File, error) {
+// open a file for writing.
+func (d *Driver) open(e *databank.Entry) (*os.File, error) {
 	stat, err := os.Stat(d.config.Path)
 	if os.IsNotExist(err) || stat == nil {
 		if err := os.MkdirAll(d.config.Path, d.config.DirMode); err != nil {
@@ -253,11 +245,12 @@ func (d *driver) open(e *databank.Entry) (*os.File, error) {
 	} else if !stat.IsDir() {
 		return nil, fmt.Errorf("%s is a file", d.config.Path)
 	}
-	return os.Create(d.filepath(e))
+	return os.Create(d.Filepath(e))
 }
 
 // filesafe provides a one-way transformation from an ID (which shouldn't, but may, contain invalid characters for a filename) to a path-safe filename.
 func filesafe(id string) string {
-	// TODO actually make it filesafe!
-	return id
+	safe := []byte{}
+	filesafeRegexp.ReplaceAll([]byte(id), safe)
+	return string(safe)
 }
