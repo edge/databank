@@ -10,13 +10,8 @@ type Driver struct {
 	store *atomicstore.Store
 }
 
-// New databank with an atomic Driver backend.
-func New(c *databank.Config) databank.Databank {
-	return databank.New(NewDriver(), c)
-}
-
-// NewDriver creates an atomic Driver.
-func NewDriver() *Driver {
+// New atomic Driver.
+func New() *Driver {
 	return &Driver{
 		store: atomicstore.New(true),
 	}

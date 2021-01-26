@@ -48,19 +48,19 @@ type Databank interface {
 	// ReadUint64 from storage.
 	ReadUint64(id string) (uint64, bool)
 	// WriteInt16 to storage.
-	WriteInt16(id string, val int16) (*Entry, bool)
+	WriteInt16(key string, val int16) (*Entry, bool)
 	// WriteInt32 to storage.
-	WriteInt32(id string, val int32) (*Entry, bool)
+	WriteInt32(key string, val int32) (*Entry, bool)
 	// WriteInt64 to storage.
-	WriteInt64(id string, val int64) (*Entry, bool)
+	WriteInt64(key string, val int64) (*Entry, bool)
 	// WriteString to storage.
-	WriteString(id, val string) (*Entry, bool)
+	WriteString(key, val string) (*Entry, bool)
 	// WriteUint16 to storage.
-	WriteUint16(id string, val uint16) (*Entry, bool)
+	WriteUint16(key string, val uint16) (*Entry, bool)
 	// WriteUint32 to storage.
-	WriteUint32(id string, val uint32) (*Entry, bool)
+	WriteUint32(key string, val uint32) (*Entry, bool)
 	// WriteUint64 to storage.
-	WriteUint64(id string, val uint64) (*Entry, bool)
+	WriteUint64(key string, val uint64) (*Entry, bool)
 }
 
 // Driver describes the storage API required by databank.

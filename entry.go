@@ -1,8 +1,8 @@
 package databank
 
 import (
-	"crypto/sha1"
 	"fmt"
+	"sort"
 	"time"
 )
 
@@ -89,14 +89,10 @@ func (e *Entry) Touch() {
 	e.Meta.Expires = e.Meta.Created.Add(e.Lifetime())
 }
 
-func hash(id string) string {
-	sum := sha1.Sum([]byte(id))
-	return string(sum[0:20])
-}
-
 // EntryID calculates an entry's ID.
 //
 // When tags are set in an entry, they are hashed into the entry's ID.
+// The order of tags does not affect ID calculation, as they are sorted internally before hashing.
 // If tags are not set, the entry's key is used as-is.
 //
 // This means that if your entry is not tagged, your calling code does not need to calculate anything i.e.
@@ -111,11 +107,16 @@ func hash(id string) string {
 // If you have an Entry already, its ID() function produces the same result.
 func EntryID(key string, tags map[string]string) string {
 	if len(tags) > 0 {
-		id := ""
-		for k, v := range tags {
-			id = fmt.Sprintf("%s&%s=%s", id, k, v)
+		keys := []string{}
+		for k := range tags {
+			keys = append(keys, k)
 		}
-		return fmt.Sprintf("%s%s", key, hash(id))
+		sort.Strings(keys)
+		tagstr := ""
+		for _, k := range keys {
+			tagstr = fmt.Sprintf("%s&%s=%s", tagstr, k, tags[k])
+		}
+		return fmt.Sprintf("%s_%d", key, sum64(tagstr))
 	}
 	return key
 }

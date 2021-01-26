@@ -18,14 +18,8 @@ type SyncDriver struct {
 	drivers []databank.Driver
 }
 
-// NewSync creates a databank with a SyncDriver backend.
-func NewSync(c *databank.Config, drivers ...databank.Driver) databank.Databank {
-	d := NewSyncDriver(drivers...)
-	return databank.New(d, c)
-}
-
-// NewSyncDriver creates a SyncDriver.
-func NewSyncDriver(drivers ...databank.Driver) *SyncDriver {
+// NewSync creates a SyncDriver.
+func NewSync(drivers ...databank.Driver) *SyncDriver {
 	return &SyncDriver{drivers}
 }
 
