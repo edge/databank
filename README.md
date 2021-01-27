@@ -23,7 +23,7 @@ The simplest way to understand Databank usage is to look at the tests;
 
 - [atomic_test.go](./pkg/atomic/atomic_test.go)
 - [disk_test.go](./pkg/disk/disk_test.go)
-- [sync_test.go](./pkg/sync/sync_test.go)
+- [sync_test.go](./pkg/proxy/sync_test.go)
 
 ## Roadmap
 
