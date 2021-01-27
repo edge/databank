@@ -82,21 +82,41 @@ func (d *SyncDriver) Cleanup() (uint, bool, []error) {
 // Delete an entry.
 //
 // SyncDriver works backwards from the authority driver to ensure that front drivers cannot recover data mid-delete.
+//
 // Errors encountered by any driver do not stop the iterator, but are not aggregated; only the last error will be returned.
+// If you need more detail of errors, calling DeleteAggregate() instead will retrieve a separate result for each driver contained in this one.
 func (d *SyncDriver) Delete(id string) (bool, error) {
-	var errResult error
-	okResult := true
+	oks, errors := d.DeleteAggregate(id)
+	ok := len(oks) > 0
+	for _, driverOK := range oks {
+		if !driverOK {
+			ok = false
+		}
+	}
+	le := len(errors)
+	if le > 0 {
+		return ok, errors[le-1]
+	}
+	return ok, nil
+}
+
+// DeleteAggregate deletes an entry, aggregating the status and error responses of each driver.
+//
+// SyncDriver works backwards from the authority driver to ensure that front drivers cannot recover data mid-delete.
+//
+// Errors encountered by any driver do not stop the iterator.
+// The status and error returned from each driver are aggregated, and returned in a pair of arrays.
+// No metadata is provided for the drivers so you will
+func (d *SyncDriver) DeleteAggregate(id string) ([]bool, []error) {
+	errors := []error{}
+	oks := []bool{}
 	for i := range d.drivers {
 		driver := d.drivers[len(d.drivers)-(i+1)]
 		ok, err := driver.Delete(id)
-		if err != nil {
-			errResult = err
-		}
-		if !ok {
-			okResult = false
-		}
+		oks = append(oks, ok)
+		errors = append(errors, err)
 	}
-	return okResult, errResult
+	return oks, errors
 }
 
 // Expire an entry.
