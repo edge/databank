@@ -33,7 +33,7 @@ func NewLoggerMiddleware(l *logger.Instance, c string, s logger.Severity) *Logge
 // Cleanup logs a cleanup operation.
 func (d *LoggerMiddleware) Cleanup(next func() (uint, bool, []error)) (uint, bool, []error) {
 	n, ok, err := next()
-	le := d.l.Context(d.context).Label("event", "cleanup")
+	le := d.l.Context(d.context).Label("operation", "cleanup")
 	if err != nil {
 		le.Error(err)
 	} else {
@@ -46,7 +46,7 @@ func (d *LoggerMiddleware) Cleanup(next func() (uint, bool, []error)) (uint, boo
 // Delete logs a delete operation.
 func (d *LoggerMiddleware) Delete(id string, next func(id string) (bool, error)) (bool, error) {
 	ok, err := next(id)
-	le := d.l.Context(d.context).Label("event", "delete").Label("id", id)
+	le := d.l.Context(d.context).Label("operation", "delete").Label("id", id)
 	if err != nil {
 		le.Error(err)
 	} else {
@@ -58,7 +58,7 @@ func (d *LoggerMiddleware) Delete(id string, next func(id string) (bool, error))
 // Expire logs an expire operation.
 func (d *LoggerMiddleware) Expire(id string, next func(id string) (bool, error)) (bool, error) {
 	ok, err := next(id)
-	le := d.l.Context(d.context).Label("event", "expire").Label("id", id)
+	le := d.l.Context(d.context).Label("operation", "expire").Label("id", id)
 	if err != nil {
 		le.Error(err)
 	} else {
@@ -70,7 +70,7 @@ func (d *LoggerMiddleware) Expire(id string, next func(id string) (bool, error))
 // Flush logs a flush operation.
 func (d *LoggerMiddleware) Flush(next func() (bool, []error)) (bool, []error) {
 	ok, err := next()
-	le := d.l.Context(d.context).Label("event", "flush")
+	le := d.l.Context(d.context).Label("operation", "flush")
 	if err != nil {
 		le.Error(err)
 	} else {
@@ -82,7 +82,7 @@ func (d *LoggerMiddleware) Flush(next func() (bool, []error)) (bool, []error) {
 // Has logs a has operation.
 func (d *LoggerMiddleware) Has(id string, next func(id string) (bool, error)) (bool, error) {
 	ok, err := next(id)
-	le := d.l.Context(d.context).Label("event", "has").Label("id", id)
+	le := d.l.Context(d.context).Label("operation", "has").Label("id", id)
 	if err != nil {
 		le.Error(err)
 	} else {
@@ -94,7 +94,7 @@ func (d *LoggerMiddleware) Has(id string, next func(id string) (bool, error)) (b
 // Read logs a read operation.
 func (d *LoggerMiddleware) Read(id string, next func(id string) (*databank.Entry, bool, error)) (*databank.Entry, bool, error) {
 	e, ok, err := next(id)
-	le := d.l.Context(d.context).Label("event", "read").Label("id", id)
+	le := d.l.Context(d.context).Label("operation", "read").Label("id", id)
 	if err != nil {
 		le.Error(err)
 	} else {
@@ -106,7 +106,7 @@ func (d *LoggerMiddleware) Read(id string, next func(id string) (*databank.Entry
 // Review logs a review operation.
 func (d *LoggerMiddleware) Review(next func() (uint, bool, []error)) (uint, bool, []error) {
 	n, ok, err := next()
-	le := d.l.Context(d.context).Label("event", "review")
+	le := d.l.Context(d.context).Label("operation", "review")
 	if err != nil {
 		le.Error(err)
 	} else {
@@ -119,7 +119,7 @@ func (d *LoggerMiddleware) Review(next func() (uint, bool, []error)) (uint, bool
 // Scan logs a scan operation.
 func (d *LoggerMiddleware) Scan(next func() ([]string, bool, error)) ([]string, bool, error) {
 	ids, ok, err := next()
-	le := d.l.Context(d.context).Label("event", "scan")
+	le := d.l.Context(d.context).Label("operation", "scan")
 	if err != nil {
 		le.Error(err)
 	} else {
@@ -132,7 +132,7 @@ func (d *LoggerMiddleware) Scan(next func() ([]string, bool, error)) ([]string, 
 // Search logs a search operation.
 func (d *LoggerMiddleware) Search(q *databank.Query, next func(q *databank.Query) (map[string]*databank.Entry, bool, error)) (map[string]*databank.Entry, bool, error) {
 	entries, ok, err := next(q)
-	le := d.l.Context(d.context).Label("event", "search")
+	le := d.l.Context(d.context).Label("operation", "search")
 	if err != nil {
 		le.Error(err)
 	} else {
@@ -145,7 +145,7 @@ func (d *LoggerMiddleware) Search(q *databank.Query, next func(q *databank.Query
 // Write logs a write operation.
 func (d *LoggerMiddleware) Write(e *databank.Entry, next func(e *databank.Entry) (bool, error)) (bool, error) {
 	ok, err := next(e)
-	le := d.l.Context(d.context).Label("event", "write").Label("id", e.ID())
+	le := d.l.Context(d.context).Label("operation", "write").Label("id", e.ID())
 	if err != nil {
 		le.Error(err)
 	} else {
