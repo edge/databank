@@ -30,7 +30,9 @@ type Databank interface {
 	// Write an entry to storage.
 	Write(e *Entry) bool
 
-	// Driver provides direct access to the backend storage API.
+	// Driver provides direct access to the backend storage API, bypassing standard Databank features and middlewares.
+	// This is only advised for use in tests.
+	// Production code should use Databank's abstractions.
 	Driver() Driver
 
 	// ReadInt16 from storage.
@@ -103,20 +105,25 @@ type Query struct{}
 type databank struct {
 	config *Config
 	driver Driver
+
+	middleware *masterMiddleware
 }
 
-// New Databank.
-func New(d Driver, c *Config) Databank {
+// New standard Databank with your config, driver, and any middlewares.
+// Once initialised, the Databank's settings and structure cannot be altered.
+func New(c *Config, d Driver, m ...Middleware) Databank {
 	var config *Config
 	if c != nil {
 		config = c
 	} else {
 		config = NewConfig()
 	}
-	return &databank{
+	db := &databank{
 		config: config,
 		driver: d,
 	}
+	db.installMiddleware(m)
+	return db
 }
 
 func (d *databank) Cleanup() (uint, bool) {
@@ -134,6 +141,11 @@ func (d *databank) Delete(id string) bool {
 	if err != nil {
 		d.report(err)
 	}
+	return ok
+}
+
+func (d *databank) delete(id string) bool {
+	ok, _ := d.middleware.Delete(id)
 	return ok
 }
 
@@ -172,10 +184,7 @@ func (d *databank) NewEntry(key string) *Entry {
 }
 
 func (d *databank) Read(id string) (*Entry, bool) {
-	e, ok, err := d.driver.Read(id)
-	if err != nil {
-		d.report(err)
-	}
+	e, ok, _ := d.middleware.Read(id)
 	if ok && !d.config.Hot {
 		if e.MaybeExpire() {
 			d.Write(e)
@@ -213,14 +222,11 @@ func (d *databank) Search(q *Query) (map[string]*Entry, bool) {
 
 func (d *databank) Write(e *Entry) bool {
 	e.CalculateSize()
-	ok, err := d.driver.Write(e)
-	if err != nil {
-		d.report(err)
-	}
+	ok, _ := d.middleware.Write(e)
 	return ok
 }
 
-// TODO improve
+// TODO deprecate - middleware can handle this
 func (d *databank) report(err error) {
 	fmt.Println(err)
 }

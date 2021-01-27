@@ -73,7 +73,7 @@ func (dt *Tester) Run(t *testing.T) {
 }
 
 func (dt *Tester) newDatabank(c *databank.Config) databank.Databank {
-	return databank.New(dt.driverFactory(), c)
+	return databank.New(c, dt.driverFactory())
 }
 
 // expect the current or next step number.
