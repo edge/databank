@@ -20,7 +20,8 @@ type LoggerMiddleware struct {
 
 // NewLoggerMiddleware creates a new LoggerMiddleware.
 // It must be preconfigured with a context name and severity.
-// These will be used for all logs except errors, for which ERROR severity is forced.
+// INFO, DEBUG or TRACE is suggested, depending on your requirements.
+// This context and severity will be used for all logs except errors, for which ERROR severity is forced.
 func NewLoggerMiddleware(l *logger.Instance, c string, s logger.Severity) *LoggerMiddleware {
 	return &LoggerMiddleware{
 		l:        l,
@@ -85,7 +86,7 @@ func (d *LoggerMiddleware) Has(id string, next func(id string) (bool, error)) (b
 	if err != nil {
 		le.Error(err)
 	} else {
-		d.log(le, ok, "ok", "has fail")
+		d.log(le, ok, "hit", "miss")
 	}
 	return ok, err
 }

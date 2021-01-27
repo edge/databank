@@ -1,9 +1,5 @@
 package databank
 
-import (
-	"fmt"
-)
-
 // Databank is a standard cache frontend for any backend Driver.
 type Databank interface {
 	// Cleanup all expired entries.
@@ -127,24 +123,11 @@ func New(c *Config, d Driver, m ...Middleware) Databank {
 }
 
 func (d *databank) Cleanup() (uint, bool) {
-	n, ok, errs := d.driver.Cleanup()
-	for _, err := range errs {
-		if err != nil {
-			d.report(err)
-		}
-	}
+	n, ok, _ := d.middleware.Cleanup()
 	return n, ok
 }
 
 func (d *databank) Delete(id string) bool {
-	ok, err := d.driver.Delete(id)
-	if err != nil {
-		d.report(err)
-	}
-	return ok
-}
-
-func (d *databank) delete(id string) bool {
 	ok, _ := d.middleware.Delete(id)
 	return ok
 }
@@ -154,28 +137,17 @@ func (d *databank) Driver() Driver {
 }
 
 func (d *databank) Expire(id string) bool {
-	ok, err := d.driver.Expire(id)
-	if err != nil {
-		d.report(err)
-	}
+	ok, _ := d.middleware.Expire(id)
 	return ok
 }
 
 func (d *databank) Flush() bool {
-	ok, errs := d.driver.Flush()
-	for _, err := range errs {
-		if err != nil {
-			d.report(err)
-		}
-	}
+	ok, _ := d.middleware.Flush()
 	return ok
 }
 
 func (d *databank) Has(id string) bool {
-	ok, err := d.driver.Has(id)
-	if err != nil {
-		d.report(err)
-	}
+	ok, _ := d.middleware.Has(id)
 	return ok
 }
 
@@ -195,28 +167,17 @@ func (d *databank) Read(id string) (*Entry, bool) {
 }
 
 func (d *databank) Review() (uint, bool) {
-	n, ok, errs := d.driver.Review()
-	for _, err := range errs {
-		if err != nil {
-			d.report(err)
-		}
-	}
+	n, ok, _ := d.middleware.Review()
 	return n, ok
 }
 
 func (d *databank) Scan() ([]string, bool) {
-	ids, ok, err := d.driver.Scan()
-	if err != nil {
-		d.report(err)
-	}
+	ids, ok, _ := d.middleware.Scan()
 	return ids, ok
 }
 
 func (d *databank) Search(q *Query) (map[string]*Entry, bool) {
-	results, ok, err := d.driver.Search(q)
-	if err != nil {
-		d.report(err)
-	}
+	results, ok, _ := d.middleware.Search(q)
 	return results, ok
 }
 
@@ -224,9 +185,4 @@ func (d *databank) Write(e *Entry) bool {
 	e.CalculateSize()
 	ok, _ := d.middleware.Write(e)
 	return ok
-}
-
-// TODO deprecate - middleware can handle this
-func (d *databank) report(err error) {
-	fmt.Println(err)
 }
