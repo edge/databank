@@ -11,7 +11,7 @@ It provides additional functionality around storage transactions and queries, in
 Some standard drivers are included:
 
 - [atomic.Driver](./pkg/atomic/atomic.go) provides atomic object storage in memory
-- [disk.Driver](./pkg/atomic/disk.go) provides persistent storage on the filesystem
+- [disk.Driver](./pkg/disk/disk.go) provides persistent storage on the filesystem
 
 Some exotic drivers are also included:
 
