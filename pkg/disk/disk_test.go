@@ -15,7 +15,11 @@ func Test_DiskDriver(t *testing.T) {
 	fmt.Printf("Disk cache location: %s\n", outDir)
 
 	dt := tests.NewTester(func() databank.Driver {
-		return New(NewConfig(outDir))
+		dt, err := New(NewConfig(outDir))
+		if err != nil {
+			panic(err)
+		}
+		return dt
 	})
 	dt.Run(t)
 }

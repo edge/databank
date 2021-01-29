@@ -62,6 +62,7 @@ func (dt *Tester) Run(t *testing.T) {
 
 	// basic crud: write, scan, has, read, delete
 	dt.testWrite(t, d)
+	dt.testCount(t, d)
 	dt.testScan(t, d)
 	dt.testHas(t, d)
 	dt.testRead(t, d)
@@ -87,6 +88,14 @@ func (dt *Tester) expect(step int) {
 		panic(fmt.Errorf("Expected next step %d but encountered %d", step, next))
 	}
 	dt.step = next
+}
+
+func (dt *Tester) testCount(t *testing.T, d databank.Databank) {
+	dt.expect(2)
+	a := assert.New(t)
+	n, ok := d.Count()
+	a.Equal(true, ok)
+	a.Equal(uint(len(testData)), n)
 }
 
 func (dt *Tester) testDelete(t *testing.T, d databank.Databank) {
@@ -147,7 +156,9 @@ func (dt *Tester) testScan(t *testing.T, d databank.Databank) {
 	ids, ok := d.Scan()
 	a.Equal(true, ok)
 	a.Equal(len(testData), len(ids))
-	fmt.Println(ids)
+
+	n, _ := d.Count()
+	a.Equal(n, uint(len(ids)))
 
 	// bonus
 	for i, id := range ids {

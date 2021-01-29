@@ -4,6 +4,9 @@ package databank
 type Databank interface {
 	// Cleanup all expired entries.
 	Cleanup() (uint, bool)
+	// Count total number of entries.
+	// Note that this includes expired entries.
+	Count() (uint, bool)
 	// Delete an entry.
 	Delete(id string) bool
 	// Expire an entry.
@@ -69,6 +72,9 @@ type Databank interface {
 type Driver interface {
 	// Cleanup all expired entries.
 	Cleanup() (uint, bool, []error)
+	// Count total number of entries in storage.
+	// Note that this includes expired entries.
+	Count() (uint, bool, error)
 	// Delete an entry.
 	// The bool return reflects the entry's nonexistence in storage when this function returns.
 	// Ergo, if the ID is not found, this function still returns true.
@@ -124,6 +130,12 @@ func New(c *Config, d Driver, m ...Middleware) Databank {
 
 func (d *databank) Cleanup() (uint, bool) {
 	n, ok, _ := d.middleware.Cleanup()
+	return n, ok
+}
+
+func (d *databank) Count() (uint, bool) {
+	// TODO add middleware support
+	n, ok, _ := d.driver.Count()
 	return n, ok
 }
 

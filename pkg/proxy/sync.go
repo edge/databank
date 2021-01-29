@@ -79,6 +79,15 @@ func (d *SyncDriver) Cleanup() (uint, bool, []error) {
 	return deleted, okResult, errors
 }
 
+// Count total number of entries in storage.
+// Note that this includes expired entries.
+//
+// SyncDriver goes straight to the authority driver when counting IDs.
+// All other drivers are by definition not authoritative, and are ignored by this implementation.
+func (d *SyncDriver) Count() (uint, bool, error) {
+	return d.authority().Count()
+}
+
 // Delete an entry.
 //
 // SyncDriver works backwards from the authority driver to ensure that front drivers cannot recover data mid-delete.

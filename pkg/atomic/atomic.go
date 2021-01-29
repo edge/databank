@@ -38,6 +38,12 @@ func (d *Driver) Cleanup() (uint, bool, []error) {
 	return deleted, true, errs
 }
 
+// Count total number of entries in storage.
+// Note that this includes expired entries.
+func (d *Driver) Count() (uint, bool, error) {
+	return uint(d.store.Len()), true, nil
+}
+
 // Delete an entry.
 // The bool return reflects the entry's nonexistence in storage when this function returns.
 // Ergo, if the ID is not found, this function still returns true.

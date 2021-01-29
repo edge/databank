@@ -26,10 +26,14 @@ type Driver struct {
 var filesafeRegexp = regexp.MustCompile("[^A-z0-9\\-\\_\\.]")
 
 // New creates a disk Driver.
-func New(c *Config) *Driver {
-	return &Driver{
+func New(c *Config) (*Driver, error) {
+	d := &Driver{
 		config: c,
 	}
+	if err := d.checkPath(); err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // NewConfig creates a disk Driver configuration with sensible defaults.
@@ -72,6 +76,20 @@ func (d *Driver) Cleanup() (uint, bool, []error) {
 		}
 	}
 	return deleted, ok, errs
+}
+
+// Count total number of entries in storage.
+// Note that this includes expired entries.
+func (d *Driver) Count() (uint, bool, error) {
+	var n uint
+	// TODO see comments for filepath.Walk; investigate faster counting methods
+	err := filepath.Walk(d.config.Path, func(path string, info os.FileInfo, err error) error {
+		if info.Mode().IsRegular() {
+			n++
+		}
+		return nil
+	})
+	return n, true, err
 }
 
 // Delete an entry.
@@ -123,7 +141,6 @@ func (d *Driver) Flush() (bool, []error) {
 	}
 	errs := []error{}
 	for _, id := range ids {
-		// TODO can improve reporting
 		_, err := d.Delete(id)
 		if err != nil {
 			errs = append(errs, err)
@@ -224,7 +241,7 @@ func (d *Driver) Search(q *databank.Query) (map[string]*databank.Entry, bool, er
 
 // Write an entry to storage.
 func (d *Driver) Write(e *databank.Entry) (bool, error) {
-	file, err := d.open(e)
+	file, err := os.Create(d.Filepath(e))
 	if err != nil {
 		return false, err
 	}
@@ -245,22 +262,23 @@ func (d *Driver) Write(e *databank.Entry) (bool, error) {
 	return true, nil
 }
 
-// open a file for writing.
-func (d *Driver) open(e *databank.Entry) (*os.File, error) {
+// checkPath verifies that the storage path exists in disk.
+// If the path doesn't already exist, it will attempt to create it.
+func (d *Driver) checkPath() error {
 	stat, err := os.Stat(d.config.Path)
 	if os.IsNotExist(err) {
 		if err := os.MkdirAll(d.config.Path, d.config.DirMode); err != nil {
-			return nil, err
+			return err
 		}
 	} else {
 		if stat.Mode().IsRegular() {
-			return nil, fmt.Errorf("%s is a file", d.config.Path)
+			return fmt.Errorf("%s is a file", d.config.Path)
 		}
 		if !stat.IsDir() {
-			return nil, fmt.Errorf("%s is not a directory", d.config.Path)
+			return fmt.Errorf("%s is not a directory", d.config.Path)
 		}
 	}
-	return os.Create(d.Filepath(e))
+	return nil
 }
 
 // filesafe provides a one-way transformation from an ID to a path-safe filename.
