@@ -82,8 +82,7 @@ func (d *SyncDriver) Cleanup() (uint, bool, []error) {
 // Count total number of entries in storage.
 // Note that this includes expired entries.
 //
-// SyncDriver goes straight to the authority driver when counting IDs.
-// All other drivers are by definition not authoritative, and are ignored by this implementation.
+// SyncDriver counts IDs in the authority driver only.
 func (d *SyncDriver) Count() (uint, bool, error) {
 	return d.authority().Count()
 }
@@ -304,8 +303,7 @@ func (d *SyncDriver) Review() (uint, bool, []error) {
 
 // Scan for IDs.
 //
-// SyncDriver goes straight to the authority driver when scanning for IDs.
-// All other drivers are by definition not authoritative, and are ignored by this implementation.
+// SyncDriver scans in the authority driver only.
 func (d *SyncDriver) Scan() ([]string, bool, error) {
 	return d.authority().Scan()
 }
