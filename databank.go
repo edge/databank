@@ -134,8 +134,7 @@ func (d *databank) Cleanup() (uint, bool) {
 }
 
 func (d *databank) Count() (uint, bool) {
-	// TODO add middleware support
-	n, ok, _ := d.driver.Count()
+	n, ok, _ := d.middleware.Count()
 	return n, ok
 }
 

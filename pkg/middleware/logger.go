@@ -43,6 +43,19 @@ func (d *LoggerMiddleware) Cleanup(next func() (uint, bool, []error)) (uint, boo
 	return n, ok, err
 }
 
+// Count logs a count operation.
+func (d *LoggerMiddleware) Count(next func() (uint, bool, error)) (uint, bool, error) {
+	n, ok, err := next()
+	le := d.l.Context(d.context).Label("operation", "count")
+	if err != nil {
+		le.Error(err)
+	} else {
+		msg := fmt.Sprintf("counted %d entries", n)
+		d.log(le, ok, msg, "count fail")
+	}
+	return n, ok, err
+}
+
 // Delete logs a delete operation.
 func (d *LoggerMiddleware) Delete(id string, next func(id string) (bool, error)) (bool, error) {
 	ok, err := next(id)

@@ -14,6 +14,7 @@ package databank
 // Middleware is powerful and should be used with care!
 type Middleware interface {
 	Cleanup(next func() (uint, bool, []error)) (uint, bool, []error)
+	Count(next func() (uint, bool, error)) (uint, bool, error)
 	Delete(id string, next func(id string) (bool, error)) (bool, error)
 	Expire(id string, next func(id string) (bool, error)) (bool, error)
 	Flush(next func() (bool, []error)) (bool, []error)
@@ -29,6 +30,7 @@ type Middleware interface {
 // See installMiddleware() for more detail.
 type masterMiddleware struct {
 	Cleanup func() (uint, bool, []error)
+	Count   func() (uint, bool, error)
 	Delete  func(id string) (bool, error)
 	Expire  func(id string) (bool, error)
 	Flush   func() (bool, []error)
@@ -46,6 +48,7 @@ type masterMiddleware struct {
 // This is a private function normally called from New() and should not be used anywhere else.
 func (d *databank) installMiddleware(middlewares []Middleware) {
 	cleanup := []func() (uint, bool, []error){d.driver.Cleanup}
+	count := []func() (uint, bool, error){d.driver.Count}
 	delete := []func(id string) (bool, error){d.driver.Delete}
 	expire := []func(id string) (bool, error){d.driver.Expire}
 	flush := []func() (bool, []error){d.driver.Flush}
@@ -62,6 +65,10 @@ func (d *databank) installMiddleware(middlewares []Middleware) {
 		lcleanup := cleanup[i]
 		cleanup = append(cleanup, func() (uint, bool, []error) {
 			return m.Cleanup(lcleanup)
+		})
+		lcount := count[i]
+		count = append(count, func() (uint, bool, error) {
+			return m.Count(lcount)
 		})
 		ldelete := delete[i]
 		delete = append(delete, func(id string) (bool, error) {
@@ -104,6 +111,7 @@ func (d *databank) installMiddleware(middlewares []Middleware) {
 	n := len(cleanup) - 1
 	d.middleware = &masterMiddleware{
 		Cleanup: cleanup[n],
+		Count:   count[n],
 		Delete:  delete[n],
 		Expire:  expire[n],
 		Flush:   flush[n],
