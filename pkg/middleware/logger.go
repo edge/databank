@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/edge/databank"
 	"github.com/edge/logger"
@@ -32,15 +33,15 @@ func NewLoggerMiddleware(l *logger.Instance, c string, s logger.Severity) *Logge
 
 // Cleanup logs a cleanup operation.
 func (d *LoggerMiddleware) Cleanup(next func() (uint, bool, []error)) (uint, bool, []error) {
-	n, ok, err := next()
+	n, ok, errs := next()
 	le := d.l.Context(d.context).Label("operation", "cleanup")
-	if err != nil {
-		le.Error(err)
+	if len(errs) > 0 {
+		le.Error(d.flatten(errs))
 	} else {
 		msg := fmt.Sprintf("%d entries deleted", n)
 		d.log(le, ok, msg, "cleanup fail")
 	}
-	return n, ok, err
+	return n, ok, errs
 }
 
 // Count logs a count operation.
@@ -82,14 +83,14 @@ func (d *LoggerMiddleware) Expire(id string, next func(id string) (bool, error))
 
 // Flush logs a flush operation.
 func (d *LoggerMiddleware) Flush(next func() (bool, []error)) (bool, []error) {
-	ok, err := next()
+	ok, errs := next()
 	le := d.l.Context(d.context).Label("operation", "flush")
-	if err != nil {
-		le.Error(err)
+	if len(errs) > 0 {
+		le.Error(d.flatten(errs))
 	} else {
 		d.log(le, ok, "flushed", "flush fail")
 	}
-	return ok, err
+	return ok, errs
 }
 
 // Has logs a has operation.
@@ -118,15 +119,15 @@ func (d *LoggerMiddleware) Read(id string, next func(id string) (*databank.Entry
 
 // Review logs a review operation.
 func (d *LoggerMiddleware) Review(next func() (uint, bool, []error)) (uint, bool, []error) {
-	n, ok, err := next()
+	n, ok, errs := next()
 	le := d.l.Context(d.context).Label("operation", "review")
-	if err != nil {
-		le.Error(err)
+	if len(errs) > 0 {
+		le.Error(d.flatten(errs))
 	} else {
 		msg := fmt.Sprintf("%d entries expired", n)
 		d.log(le, ok, msg, "review fail")
 	}
-	return n, ok, err
+	return n, ok, errs
 }
 
 // Scan logs a scan operation.
@@ -165,6 +166,15 @@ func (d *LoggerMiddleware) Write(e *databank.Entry, next func(e *databank.Entry)
 		d.log(le, ok, "ok", "write fail")
 	}
 	return ok, err
+}
+
+// flatten an array of errors into one, while keeping all their messages in the original sequence.
+func (d *LoggerMiddleware) flatten(errs []error) error {
+	strs := []string{}
+	for _, err := range errs {
+		strs = append(strs, fmt.Sprintf("%s", err))
+	}
+	return fmt.Errorf("%d errors: %s", len(strs), strings.Join(strs, "; "))
 }
 
 // log an entry. Simple convenience method.
