@@ -107,13 +107,12 @@ type Query struct{}
 type databank struct {
 	config *Config
 	driver Driver
-
-	middleware *masterMiddleware
 }
 
-// New standard Databank with your config, driver, and any middlewares.
+// New standard Databank with your config and driver.
 // Once initialised, the Databank's settings and structure cannot be altered.
-func New(c *Config, d Driver, m ...Middleware) Databank {
+func New(c *Config, d Driver) Databank {
+	// TODO this shouldn't be optional - force explicit invocation
 	var config *Config
 	if c != nil {
 		config = c
@@ -124,22 +123,21 @@ func New(c *Config, d Driver, m ...Middleware) Databank {
 		config: config,
 		driver: d,
 	}
-	db.installMiddleware(m)
 	return db
 }
 
 func (d *databank) Cleanup() (uint, bool) {
-	n, ok, _ := d.middleware.Cleanup()
+	n, ok, _ := d.driver.Cleanup()
 	return n, ok
 }
 
 func (d *databank) Count() (uint, bool) {
-	n, ok, _ := d.middleware.Count()
+	n, ok, _ := d.driver.Count()
 	return n, ok
 }
 
 func (d *databank) Delete(id string) bool {
-	ok, _ := d.middleware.Delete(id)
+	ok, _ := d.driver.Delete(id)
 	return ok
 }
 
@@ -148,17 +146,17 @@ func (d *databank) Driver() Driver {
 }
 
 func (d *databank) Expire(id string) bool {
-	ok, _ := d.middleware.Expire(id)
+	ok, _ := d.driver.Expire(id)
 	return ok
 }
 
 func (d *databank) Flush() bool {
-	ok, _ := d.middleware.Flush()
+	ok, _ := d.driver.Flush()
 	return ok
 }
 
 func (d *databank) Has(id string) bool {
-	ok, _ := d.middleware.Has(id)
+	ok, _ := d.driver.Has(id)
 	return ok
 }
 
@@ -167,7 +165,7 @@ func (d *databank) NewEntry(key string) *Entry {
 }
 
 func (d *databank) Read(id string) (*Entry, bool) {
-	e, ok, _ := d.middleware.Read(id)
+	e, ok, _ := d.driver.Read(id)
 	if ok && !d.config.Hot {
 		if e.MaybeExpire() {
 			d.Write(e)
@@ -178,22 +176,22 @@ func (d *databank) Read(id string) (*Entry, bool) {
 }
 
 func (d *databank) Review() (uint, bool) {
-	n, ok, _ := d.middleware.Review()
+	n, ok, _ := d.driver.Review()
 	return n, ok
 }
 
 func (d *databank) Scan() ([]string, bool) {
-	ids, ok, _ := d.middleware.Scan()
+	ids, ok, _ := d.driver.Scan()
 	return ids, ok
 }
 
 func (d *databank) Search(q *Query) (map[string]*Entry, bool) {
-	results, ok, _ := d.middleware.Search(q)
+	results, ok, _ := d.driver.Search(q)
 	return results, ok
 }
 
 func (d *databank) Write(e *Entry) bool {
 	e.CalculateSize()
-	ok, _ := d.middleware.Write(e)
+	ok, _ := d.driver.Write(e)
 	return ok
 }
